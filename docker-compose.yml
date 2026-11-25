@@ -1,0 +1,27 @@
+# For trying Kener on your own computer. Railway does not use this file; it uses the Dockerfile.
+# Run:  docker compose up --build     then open http://localhost:3000
+services:
+  kener:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file: .env
+    depends_on:
+      - postgres
+      - redis
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: kener
+      POSTGRES_USER: kener
+      POSTGRES_PASSWORD: kener_password
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+volumes:
+  pg_data:
+  redis_data:

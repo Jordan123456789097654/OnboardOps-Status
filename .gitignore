@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+database/
+*.sqlite
+*.sqlite.db
+.DS_Store
