@@ -11,6 +11,8 @@ import { api } from "./api";
 type Open = { id: string; ref: string; status: string; priority: string; assignee: string | null; topic: string; source: string; createdAt: string; url: string; security?: boolean };
 type Linked = { id: string; ref: string; status: string; threadId: string; assignee: string | null };
 
+/** The support role is pinged on every new ticket. Override with SUPPORT_ROLE_ID if the role ever changes. */
+const SUPPORT_ROLE_ID = process.env.SUPPORT_ROLE_ID?.trim() || "1575312616409137423";
 const PARENT = "support-tickets";
 const URGENT = "support-urgent";
 const MAX_PER_RUN = 10;
@@ -60,10 +62,10 @@ export async function openTicketThreads(client: Client, guildId: string): Promis
       .catch(() => null);
     if (!thread) continue;
     await thread.send({
-      content: isSecurity ? "**Security report.** Treat as urgent." : undefined,
+      content: `<@&${SUPPORT_ROLE_ID}>${isSecurity ? " **Security report.** Treat as urgent." : " New ticket."}`,
+      allowedMentions: { roles: [SUPPORT_ROLE_ID], users: [] },
       embeds: [ticketEmbed(t)],
       components: [controls({ id: t.id, threadId: thread.id })],
-      allowedMentions: { parse: [] },
     });
     const saved = await api<{ ok: boolean }>("ops/tickets/thread", "", { method: "POST", body: { id: t.id, threadId: thread.id } });
     if (saved.status !== 200) {
