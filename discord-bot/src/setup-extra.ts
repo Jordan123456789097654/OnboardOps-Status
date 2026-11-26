@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ChannelType, EmbedBuilder, type Client, type Guild, type GuildBasedChannel, type MessageCreateOptions, type TextChannel } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ChannelType, EmbedBuilder, type Client, type Guild, type GuildBasedChannel, type MessageCreateOptions, type Role, type TextChannel } from "discord.js";
 import { EXTRA_CATEGORIES } from "./layout-extra";
 import { CATEGORIES, WEBHOOK_CHANNELS } from "./layout";
 
@@ -40,6 +40,66 @@ export async function runWipe(guild: Guild): Promise<{ removed: string[]; failed
     }
   }
   return { removed, failed };
+}
+
+/* ---------------- Nuke: delete EVERY channel, category and deletable role ---------------- */
+
+export type NukePlan = { channels: GuildBasedChannel[]; roles: Role[]; skippedRoles: Role[] };
+
+/** Every channel, category and role in the server that /nuke would delete. */
+export async function nukePlan(guild: Guild): Promise<NukePlan> {
+  await guild.channels.fetch();
+  await guild.roles.fetch();
+  const channels = [...guild.channels.cache.values()].filter((c) => !c.isThread());
+  const customRoles = [...guild.roles.cache.values()].filter((r) => r.id !== guild.roles.everyone.id && !r.managed);
+  const roles = customRoles.filter((r) => r.editable);
+  const skippedRoles = customRoles.filter((r) => !r.editable);
+  return { channels, roles, skippedRoles };
+}
+
+/** Deletes every non-category channel (current channel last), every category, and every deletable role. */
+export async function runNuke(guild: Guild, currentChannelId?: string): Promise<{
+  removedChannels: string[];
+  failedChannels: string[];
+  removedRoles: string[];
+  failedRoles: string[];
+  skippedRoles: string[];
+}> {
+  const { channels, roles, skippedRoles } = await nukePlan(guild);
+  const removedChannels: string[] = [];
+  const failedChannels: string[] = [];
+  const removedRoles: string[] = [];
+  const failedRoles: string[] = [];
+
+  const nonCat = channels.filter((c) => c.type !== ChannelType.GuildCategory && c.id !== currentChannelId);
+  const current = channels.filter((c) => c.type !== ChannelType.GuildCategory && c.id === currentChannelId);
+  const cats = channels.filter((c) => c.type === ChannelType.GuildCategory);
+
+  for (const r of roles) {
+    try {
+      await r.delete("OnboardOps staff setup: nuke");
+      removedRoles.push(r.name);
+    } catch {
+      failedRoles.push(r.name);
+    }
+  }
+
+  for (const c of [...nonCat, ...current, ...cats]) {
+    try {
+      await c.delete("OnboardOps staff setup: nuke");
+      removedChannels.push(c.name);
+    } catch {
+      failedChannels.push(c.name);
+    }
+  }
+
+  return {
+    removedChannels,
+    failedChannels,
+    removedRoles,
+    failedRoles,
+    skippedRoles: skippedRoles.map((r) => r.name),
+  };
 }
 
 /* ---------------- Bio: the bot's About Me (application description) ---------------- */

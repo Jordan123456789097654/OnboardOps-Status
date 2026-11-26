@@ -12,7 +12,7 @@ import {
 import { api, apiProblem, siteUrl } from "./api";
 import { LEAVE_ROLE, ONCALL_ROLE, STAFF_ROLES, WEBHOOK_CHANNELS } from "./layout";
 import { exportConfig, permissionCheck, runSetup, type Report } from "./setup";
-import { ensureWebhooks, runWipe, setBio, wipePlan } from "./setup-extra";
+import { ensureWebhooks, nukePlan, runNuke, runWipe, setBio, wipePlan } from "./setup-extra";
 import { staffCommands } from "./staff-commands";
 import { confirm } from "./util";
 import { opsCommands } from "./ops-commands";
@@ -119,6 +119,60 @@ const setup: Command = {
     const body = lines.join("\n\n");
     await i.followUp({ content: body.slice(0, 1900), ephemeral: true }).catch(() => undefined);
     await i.editReply({ content: "Setup finished. Details below.", components: [] }).catch(() => undefined);
+  },
+};
+
+const nuke: Command = {
+  json: new SlashCommandBuilder()
+    .setName("nuke")
+    .setDescription("DELETE every channel, category, and role in this server. Asks to confirm.")
+    .addBooleanOption((o) => o.setName("dry_run").setDescription("Show what would be deleted, without deleting anything"))
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setDMPermission(false)
+    .toJSON(),
+  access: "manage",
+  async run(i) {
+    if (i.guild!.ownerId !== i.user.id && !i.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+      await i.reply({ content: "Only the server owner or an Administrator can run /nuke.", ephemeral: true });
+      return;
+    }
+    const dry = i.options.getBoolean("dry_run") ?? false;
+    if (dry) {
+      await i.deferReply({ ephemeral: true });
+      const plan = await nukePlan(i.guild!);
+      const parts = [
+        `**Dry run.** Nothing was deleted.`,
+        `**Channels & categories (${plan.channels.length}):** ${plan.channels.map((c) => c.name).slice(0, 40).join(", ") || "none"}`,
+        `**Roles (${plan.roles.length}):** ${plan.roles.map((r) => r.name).slice(0, 40).join(", ") || "none"}`,
+      ];
+      if (plan.skippedRoles.length) {
+        parts.push(`**Skipped roles (at or above the bot's role, ${plan.skippedRoles.length}):** ${plan.skippedRoles.map((r) => r.name).join(", ")}`);
+      }
+      await i.editReply(parts.join("\n").slice(0, 1900));
+      return;
+    }
+    const plan = await nukePlan(i.guild!);
+    const warn = [
+      `**NUKE SERVER: this will permanently DELETE:**`,
+      `• **${plan.channels.length}** channel(s) & categories (and all messages inside them)`,
+      `• **${plan.roles.length}** role(s)`,
+    ];
+    if (plan.skippedRoles.length) {
+      warn.push(`Note: ${plan.skippedRoles.length} role(s) sit at or above the bot's role and cannot be deleted by Discord (${plan.skippedRoles.map((r) => r.name).slice(0, 10).join(", ")}).`);
+    }
+    warn.push("**This cannot be undone.** Continue?");
+    if (!(await confirm(i, warn.join("\n")))) return;
+    await i.editReply({ content: "Deleting all roles and channels…", components: [] }).catch(() => undefined);
+    const res = await runNuke(i.guild!, i.channelId);
+    const summary = [
+      `**Nuke finished for ${i.guild!.name}.**`,
+      `• Deleted **${res.removedChannels.length}** channel(s)/categories${res.failedChannels.length ? ` (failed: ${res.failedChannels.join(", ")})` : ""}`,
+      `• Deleted **${res.removedRoles.length}** role(s)${res.failedRoles.length ? ` (failed: ${res.failedRoles.join(", ")})` : ""}`,
+      res.skippedRoles.length ? `• Skipped (above bot role): ${res.skippedRoles.join(", ")}` : "",
+    ].filter(Boolean).join("\n");
+    console.log(summary);
+    await i.editReply({ content: summary.slice(0, 1900), components: [] }).catch(() => undefined);
+    await i.user.send(summary.slice(0, 1900)).catch(() => undefined);
   },
 };
 
@@ -390,7 +444,7 @@ const help: Command = {
         "**Tickets (staff):** `/say` in a ticket thread replies to the customer (emailed and saved). The Reply button does the same in a form.",
         "**Everyone:** `/poll`, `/roll`, `/pick`. **Staff:** `/remind`.",
         "**Incidents (staff):** `/incident start|note|resolve` runs an incident in its own thread. `/runbook` shows the step-by-step checklists.",
-        "**Admins:** `/setup` (try `dry_run`), `/permcheck`, `/backup-config`, `/webhooks`, `/announce`, `/oncall set|clear`, `/purge`, `/slowmode`",
+        "**Admins:** `/setup` (try `dry_run`), `/nuke` (deletes every channel & role), `/permcheck`, `/backup-config`, `/webhooks`, `/announce`, `/oncall set|clear`, `/purge`, `/slowmode`",
         "Pick your alert roles in #roles.",
       ].join("\n"),
     });
@@ -398,5 +452,5 @@ const help: Command = {
 };
 
 export const commands = new Map<string, Command>(
-  [setup, permcheck, backup, webhooks, link, unlink, me, status, announce, standup, oncall, loa, purge, slowmode, userinfo, ping, help, ...opsCommands, ...toolsCommands, ...helperCommands, ...staffCommands].map((c) => [c.json.name, c]),
+  [setup, nuke, permcheck, backup, webhooks, link, unlink, me, status, announce, standup, oncall, loa, purge, slowmode, userinfo, ping, help, ...opsCommands, ...toolsCommands, ...helperCommands, ...staffCommands].map((c) => [c.json.name, c]),
 );
