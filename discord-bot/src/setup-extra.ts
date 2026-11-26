@@ -157,7 +157,7 @@ const GUIDES: Guide[] = [
     footer: "OnboardOps guide: support-tickets v1",
     embed: () => new EmbedBuilder().setTitle("How tickets work").setColor(BLUE).setDescription("Every new ticket gets its own thread here.").addFields(
       field("1. Claim", "Press **Claim** so the team knows you have it."),
-      field("2. Read", "Open the message in the admin panel. Customer messages are never posted in Discord."),
+      field("2. Read", "The whole chat appears in this thread as it happens, customer and staff messages."),
       field("3. Reply", "Use `/say` in the thread, or the **Reply to customer** button. It is emailed and saved on the ticket."),
       field("4. Solve", "Press **Mark solved** when it is done. The thread is archived."),
     ),
