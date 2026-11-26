@@ -49,6 +49,35 @@ Use a temporary name first (for example `status2.onboardops.org`) while Better S
 3. Update `ORIGIN` to the new address and redeploy.
 4. When you are ready to switch fully, move `status.onboardops.org` here (and plan the cutover from Better Stack in a quiet hour).
 
+
+## The staff Discord bot (second Railway service)
+
+The OnboardOps staff Discord bot lives in `discord-bot/` and runs as its own service in the **same Railway project** as Kener, built from this same repository.
+
+**Before you start:** stop the bot wherever it runs today. If two copies run at once, every command gets answered twice.
+
+1. In the Railway project choose **New, GitHub Repo** and pick this repository again. This creates a second service. Rename it `discord-bot`.
+2. Open the new service, **Settings, Source, Root Directory**, and set it to `discord-bot`. Railway then reads `discord-bot/railway.json` and builds the bot (not Kener).
+3. **Variables** (names only here; paste the real values straight into Railway, never into chat or git):
+   | Variable | Value |
+   |---|---|
+   | `DISCORD_TOKEN` | the bot token from the Discord Developer Portal |
+   | `DISCORD_CLIENT_ID` | the application ID |
+   | `DISCORD_GUILD_ID` | the staff server's ID |
+   | `STAFF_BOT_KEY` | the **same value** as `STAFF_BOT_KEY` in Vercel |
+   | `SITE_URL` | `https://www.onboardops.org` |
+   | `PORT` | `3000` |
+   | `KENER_HEARTBEAT_URL` | added later (see below) |
+4. Do **not** generate a public domain for the bot. It doesn't need one.
+5. Deploy. The deploy is healthy when Railway sees `/healthz` return 200, which only happens once the bot is logged in to Discord. In the logs you should see `Ready as ...`.
+6. **Watch paths (optional, recommended).** In each service's **Settings** set watch paths so a change to one doesn't redeploy the other: Kener `/Dockerfile` and `/railway.json`; bot `/discord-bot/**`.
+
+### Watching the bot from the status page
+The bot sends a heartbeat to the status page every minute while it's connected. In Kener, the **Discord bot** monitor is a heartbeat monitor: if the pings stop, it goes down. Copy that monitor's heartbeat address into the bot's `KENER_HEARTBEAT_URL` variable in Railway and redeploy the bot.
+
+### Moving the code
+This repo is now the home of the bot's code. The old copy in the main OnboardOps repository can be removed once this one is confirmed working, so there is only one place to edit.
+
 ## Set up monitors
 In the Kener admin, add monitors for each service (website, sign-in, API, and so on) and group them on the status page. Match the service names you use today (Website, Sign-in, Core API, Public API, Database, File storage, Email, Domains, Overall status) so the OnboardOps admin tools line up.
 

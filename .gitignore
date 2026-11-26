@@ -5,3 +5,4 @@ database/
 *.sqlite
 *.sqlite.db
 .DS_Store
+node_modules/
