@@ -40,6 +40,7 @@ export function startScheduler(client: Client, guildId: string): void {
   let lastDigest = alreadyPast(SUMMARY_HOUR) ? today() : "";
   let lastStandup = alreadyPast(STANDUP_HOUR) ? today() : "";
   let lastGaps = alreadyPast(SUMMARY_HOUR) ? today() : "";
+  let lastDeletions = "";
 
   const raise = (g: Guild, key: string, bad: boolean, title: string, detail: string) => {
     if (bad && !active.has(key)) { active.add(key); void post(g, "alerts", new EmbedBuilder().setColor(0xdc2626).setTitle(title).setDescription(detail).setTimestamp(new Date())); }
@@ -107,6 +108,18 @@ export function startScheduler(client: Client, guildId: string): void {
           { name: "New subscribers", value: String(d.newSubscribers), inline: true },
           { name: "Newsletter issues", value: String(d.newsletterIssues), inline: true },
         ).setFooter({ text: "Last 7 days" }).setTimestamp(now));
+      }
+    }
+    // Every day: permanently delete accounts whose 14-day grace period has passed. Runs on the website, so the bot just asks.
+    if (hour === SUMMARY_HOUR && lastDeletions !== today()) {
+      lastDeletions = today();
+      const r = await api<{ deleted: number; skipped: string[] }>("ops/jobs/account-deletions", "", { method: "POST" });
+      if (r.status === 200 && r.data && (r.data.deleted > 0 || r.data.skipped.length > 0)) {
+        await post(g, "alerts", new EmbedBuilder()
+          .setColor(0x2563eb)
+          .setTitle("Account deletions")
+          .setDescription(`Deleted ${r.data.deleted} account(s) after their grace period.${r.data.skipped.length ? ` Skipped ${r.data.skipped.length} because they are the only owner of a workspace.` : ""}`)
+          .setTimestamp(now));
       }
     }
     // Monday: the questions Maya couldn't answer last week, so the docs can be improved.
