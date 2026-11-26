@@ -47,7 +47,11 @@ export async function openTicketThreads(client: Client, guildId: string): Promis
   const parent = find(g, PARENT);
   if (!parent) return;
   const r = await api<{ tickets: Open[] }>("ops/tickets/unthreaded", "");
-  if (r.status !== 200 || !r.data) return;
+  if (r.status !== 200 || !r.data) {
+    console.error(`Ticket threads: the website answered ${r.status} for ops/tickets/unthreaded. Check STAFF_BOT_KEY matches Vercel.`);
+    return;
+  }
+  if (r.data.tickets.length) console.log(`Ticket threads: opening ${r.data.tickets.length} thread(s).`);
   for (const t of r.data.tickets.slice(0, MAX_PER_RUN)) {
     const isSecurity = !!t.security;
     const channel = isSecurity ? find(g, URGENT) ?? parent : parent;
