@@ -14,6 +14,8 @@ import {
   type Role,
   type TextChannel,
 } from "discord.js";
+import { EXTRA_CATEGORIES } from "./layout-extra";
+import { runGuides } from "./setup-extra";
 import { CATEGORIES, PICKER_FOOTER, PICKER_TITLE, PING_ROLES, ROLE_SPECS, RULES, RULES_FOOTER, RULES_TITLE, STAFF_ROLES, type ChannelSpec } from "./layout";
 
 export type Report = { lines: string[]; created: number; repaired: number; existing: number };
@@ -68,7 +70,7 @@ export async function runSetup(guild: Guild, dry: boolean): Promise<Report> {
     if (role) roles.set(spec.name, role);
   }
 
-  for (const cat of CATEGORIES) {
+  for (const cat of [...CATEGORIES, ...EXTRA_CATEGORIES]) {
     let category = guild.channels.cache.find((c): c is CategoryChannel => c.type === ChannelType.GuildCategory && c.name === cat.name);
     if (category) {
       existing++;
@@ -101,6 +103,7 @@ export async function runSetup(guild: Guild, dry: boolean): Promise<Report> {
   if (!dry) {
     lines.push(`${await ensureRules(guild)} rules message in #welcome-rules`);
     lines.push(`${await ensurePicker(guild)} role picker in #roles`);
+    lines.push(...(await runGuides(guild, guild.client.user.id)));
   } else {
     lines.push("~ rules message and role picker would be posted or refreshed");
   }

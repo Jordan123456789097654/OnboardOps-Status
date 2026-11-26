@@ -3,6 +3,7 @@ import { allowed, commands } from "./commands";
 import { handleAppealButton, handleAutocomplete, handleBanRequestButton, handleModal, handleTicketButton } from "./interactions";
 import { startHealth } from "./health";
 import { startScheduler } from "./scheduler";
+import { openTicketThreads } from "./ticket-threads";
 import { handlePickRole } from "./setup";
 import { logCommand, tooFast } from "./util";
 
@@ -30,6 +31,7 @@ client.once(Events.ClientReady, async (c) => {
     await new REST({ version: "10" }).setToken(TOKEN).put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: [...commands.values()].map((x) => x.json) });
     console.log(`Ready as ${c.user.tag}. ${commands.size} commands registered.`);
     startScheduler(c, GUILD_ID);
+    setInterval(() => void openTicketThreads(c, GUILD_ID).catch((e) => console.error("ticket threads failed:", e instanceof Error ? e.message : e)), 60_000);
   } catch (e) {
     console.error("Could not register commands:", e instanceof Error ? e.message : e);
   }

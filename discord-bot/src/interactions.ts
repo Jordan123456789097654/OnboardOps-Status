@@ -9,6 +9,7 @@ import {
 } from "discord.js";
 import { api, failure } from "./api";
 import { buildModal, confirm, logEvent } from "./util";
+import { sendFromThread } from "./ticket-threads";
 
 /** Buttons on notices the website posts, and the pop-up forms the commands open. Every action runs as the person who pressed it. */
 
@@ -24,6 +25,11 @@ async function stamp(i: ButtonInteraction, text: string, keepRow?: ActionRowBuil
 
 export async function handleTicketButton(i: ButtonInteraction): Promise<void> {
   const [, action, id] = i.customId.split(":");
+  if (action === "reply" && id) {
+    // Opens a private form, so the customer's reply is typed in a pop-up and sent from the thread.
+    await i.showModal(buildModal(`replyt:${i.channelId}`, "Reply to the customer", [{ id: "body", label: "Message to the customer", paragraph: true, required: true, max: 4000, placeholder: "Write the reply. It is emailed to the customer and saved on the ticket." }]));
+    return;
+  }
   if (!id || (action !== "claim" && action !== "solve")) { await i.reply({ content: "That button isn't valid.", ephemeral: true }); return; }
   await i.deferUpdate();
   const r = await api<{ ok: boolean }>(`support/${action}`, i.user.id, { method: "POST", body: { id } });
@@ -70,6 +76,16 @@ export async function handleModal(i: ModalSubmitInteraction): Promise<void> {
     const r = await api<{ ref: string; emailed: boolean }>("support/reply", i.user.id, { method: "POST", body: { ref: parts[1], body: field(i, "body") } });
     await i.editReply(r.status === 200 ? (r.data?.emailed ? "Sent. The customer was emailed." : "Saved on the ticket, but the email could not be sent. Check the ticket in the admin panel.") : failure(r));
     await log("reply", r.status === 200, r.status === 200 ? `ticket ${parts[1]}` : failure(r));
+    return;
+  }
+
+  if (kind === "replyt") {
+    await i.deferReply({ ephemeral: true });
+    const thread = i.channel;
+    if (!thread?.isThread()) { await i.editReply("Replies are sent from inside the ticket's thread."); return; }
+    const res = await sendFromThread(thread, i.user.id, field(i, "body"));
+    await i.editReply(res.message);
+    await log("ticket reply", res.ok, res.ok ? thread.name : res.message);
     return;
   }
 

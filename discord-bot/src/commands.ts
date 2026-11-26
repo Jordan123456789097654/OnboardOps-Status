@@ -12,9 +12,12 @@ import {
 import { api, apiProblem, siteUrl } from "./api";
 import { LEAVE_ROLE, ONCALL_ROLE, STAFF_ROLES, WEBHOOK_CHANNELS } from "./layout";
 import { exportConfig, permissionCheck, runSetup, type Report } from "./setup";
+import { ensureWebhooks, runWipe, setBio, wipePlan } from "./setup-extra";
+import { staffCommands } from "./staff-commands";
 import { confirm } from "./util";
 import { opsCommands } from "./ops-commands";
 import { toolsCommands } from "./tools-commands";
+import { helperCommands } from "./helpers-commands";
 
 /** "any": everyone in the server. "staff": members with a staff role. "manage": the server owner, administrators, and the Owner or Admin roles. */
 export type Access = "any" | "staff" | "manage";
@@ -69,21 +72,53 @@ function formatReport(r: Report, dry: boolean): string {
 const setup: Command = {
   json: new SlashCommandBuilder()
     .setName("setup")
-    .setDescription("Create the staff roles, categories and channels (safe to run again)")
-    .addBooleanOption((o) => o.setName("dry_run").setDescription("List what would change without changing anything"))
+    .setDescription("Build the staff server: roles, channels, guides and webhooks (safe to run again)")
+    .addBooleanOption((o) => o.setName("dry_run").setDescription("Show what would change, without changing anything"))
+    .addBooleanOption((o) => o.setName("wipe").setDescription("DELETE every channel and category that is not part of the layout. Asks to confirm."))
+    .addStringOption((o) => o.setName("bio").setDescription("Set the bot's About Me text").setMaxLength(400))
+    .addBooleanOption((o) => o.setName("webhooks").setDescription("Create the website webhooks and show their links to you only"))
     .setDMPermission(false)
     .toJSON(),
   access: "manage",
   async run(i) {
     const dry = i.options.getBoolean("dry_run") ?? false;
+    const wipe = i.options.getBoolean("wipe") ?? false;
+    const bio = i.options.getString("bio")?.trim() || null;
+    const hooks = i.options.getBoolean("webhooks") ?? false;
+    const plan = wipe ? wipePlan(i.guild!) : null;
     if (dry) {
       await i.deferReply({ ephemeral: true });
-      await i.editReply(formatReport(await runSetup(i.guild!, true), true));
+      const report = formatReport(await runSetup(i.guild!, true), true);
+      const extra = [
+        plan ? `**Wipe would delete ${plan.channels.length} channel(s) or categories:** ${plan.channels.map((c) => c.name).slice(0, 40).join(", ") || "none"}` : "",
+        bio ? `Bio would be set to: "${bio}"` : "",
+        hooks ? "Webhooks would be created or found in the notice channels." : "",
+      ].filter(Boolean).join("\n");
+      await i.editReply(extra ? `${report}\n\n${extra}` : report);
       return;
     }
-    const ok = await confirm(i, "This creates any missing roles, categories and channels, re-applies channel permissions, and posts the rules and role picker. **Nothing is deleted.** Continue?");
-    if (!ok) return;
-    await i.editReply({ content: formatReport(await runSetup(i.guild!, false), false), components: [] });
+    const parts = ["This creates any missing roles, categories and channels, re-applies permissions, and refreshes the guide embeds and the role picker."];
+    if (plan) parts.push(`**WIPE: this DELETES ${plan.channels.length} channel(s) or categories that are not in the layout, with their messages. This cannot be undone.**`);
+    if (bio) parts.push(`The bot's bio will change to: "${bio}"`);
+    if (hooks) parts.push("Webhooks will be created or found, and their links shown to you only.");
+    parts.push("Roles and members are never deleted. Continue?");
+    if (!(await confirm(i, parts.join("\n\n")))) return;
+    await i.editReply({ content: "Working...", components: [] });
+    const lines: string[] = [];
+    if (plan) {
+      const w = await runWipe(i.guild!);
+      lines.push(`Wiped ${w.removed.length} channel(s).${w.failed.length ? ` Could not delete: ${w.failed.join(", ")}` : ""}`);
+    }
+    const report = await runSetup(i.guild!, false);
+    lines.unshift(formatReport(report, false));
+    if (bio) await setBio(i.client, bio).then(() => lines.push("Bio updated.")).catch((e) => lines.push(`Bio failed: ${e instanceof Error ? e.message : "error"}`));
+    if (hooks) {
+      const urls = await ensureWebhooks(i.guild!, i.client.user.id);
+      lines.push("Webhooks (secret, do not paste them in chat):\n```\n" + urls.join("\n") + "\n```");
+    }
+    const body = lines.join("\n\n");
+    await i.followUp({ content: body.slice(0, 1900), ephemeral: true }).catch(() => undefined);
+    await i.editReply({ content: "Setup finished. Details below.", components: [] }).catch(() => undefined);
   },
 };
 
@@ -352,6 +387,8 @@ const help: Command = {
         "**Moderation:** `/lookup`, `/warn`, `/ban`, `/unban`, `/suspend`, `/reinstate`. These open a private form. The website checks your own staff role.",
         "**Operations:** `/maintenance on|off` (owners).",
         "**Health and tools (staff):** `/health` (every service), `/mailauth`, `/dns`, `/ssl`, `/changelog`, `/botinfo`. Everyone: `/time`.",
+        "**Tickets (staff):** `/say` in a ticket thread replies to the customer (emailed and saved). The Reply button does the same in a form.",
+        "**Everyone:** `/poll`, `/roll`, `/pick`. **Staff:** `/remind`.",
         "**Incidents (staff):** `/incident start|note|resolve` runs an incident in its own thread. `/runbook` shows the step-by-step checklists.",
         "**Admins:** `/setup` (try `dry_run`), `/permcheck`, `/backup-config`, `/webhooks`, `/announce`, `/oncall set|clear`, `/purge`, `/slowmode`",
         "Pick your alert roles in #roles.",
@@ -361,5 +398,5 @@ const help: Command = {
 };
 
 export const commands = new Map<string, Command>(
-  [setup, permcheck, backup, webhooks, link, unlink, me, status, announce, standup, oncall, loa, purge, slowmode, userinfo, ping, help, ...opsCommands, ...toolsCommands].map((c) => [c.json.name, c]),
+  [setup, permcheck, backup, webhooks, link, unlink, me, status, announce, standup, oncall, loa, purge, slowmode, userinfo, ping, help, ...opsCommands, ...toolsCommands, ...helperCommands, ...staffCommands].map((c) => [c.json.name, c]),
 );
