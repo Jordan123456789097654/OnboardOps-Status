@@ -162,4 +162,22 @@ const deploylog: Command = {
   },
 };
 
-export const staffCommands: Command[] = [handoff, shift, onboard, policy, queue, wins, deploylog];
+/** Ask Maya a question about how OnboardOps works. Answered from the help docs, and logged if the docs don't cover it. */
+const askMaya: Command = {
+  json: new SlashCommandBuilder()
+    .setName("ask-maya")
+    .setDescription("Ask Maya how something in OnboardOps works (answered from the help docs)")
+    .setDMPermission(false)
+    .addStringOption((o) => o.setName("question").setDescription("Your question").setRequired(true).setMaxLength(500))
+    .toJSON(),
+  access: "staff",
+  async run(i) {
+    await i.deferReply({ ephemeral: true });
+    const r = await api<{ answer: string; found: boolean }>("ops/maya/ask", i.user.id, { method: "POST", body: { question: i.options.getString("question", true) } });
+    if (r.status !== 200 || !r.data) { await i.editReply("Maya couldn't answer just now. Try again in a moment."); return; }
+    const body = r.data.answer.length > 3800 ? `${r.data.answer.slice(0, 3799)}…` : r.data.answer;
+    await i.editReply({ embeds: [new EmbedBuilder().setColor(r.data.found ? BLUE : ORANGE).setTitle("Maya").setDescription(body).setFooter({ text: r.data.found ? "From the help docs" : "Not in the help docs. It's on this week's list." })] });
+  },
+};
+
+export const staffCommands: Command[] = [handoff, shift, onboard, policy, queue, wins, deploylog, askMaya];

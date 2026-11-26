@@ -9,7 +9,7 @@ import {
 } from "discord.js";
 import { api, failure } from "./api";
 import { buildModal, confirm, logEvent } from "./util";
-import { sendFromThread } from "./ticket-threads";
+import { refreshSummary, sendFromThread } from "./ticket-threads";
 
 /** Buttons on notices the website posts, and the pop-up forms the commands open. Every action runs as the person who pressed it. */
 
@@ -30,6 +30,24 @@ export async function handleTicketButton(i: ButtonInteraction): Promise<void> {
     await i.showModal(buildModal(`replyt:${i.channelId}`, "Reply to the customer", [{ id: "body", label: "Message to the customer", paragraph: true, required: true, max: 4000, placeholder: "Write the reply. It is emailed to the customer and saved on the ticket." }]));
     return;
   }
+  if (action === "senddraft" && id) {
+    // Sends Maya's suggested reply exactly as it was shown. A person pressed the button, so the reply is theirs.
+    await i.deferUpdate();
+    const base = i.message.embeds[0];
+    const draft = base?.description ?? "";
+    const thread = i.channel;
+    if (!thread?.isThread() || !draft) { await i.followUp({ content: "There's no draft to send.", ephemeral: true }); return; }
+    const res = await sendFromThread(thread, i.user.id, draft);
+    if (!res.ok) { await i.followUp({ content: res.message, ephemeral: true }); return; }
+    await i.editReply({ embeds: base ? [EmbedBuilder.from(base).addFields({ name: "Sent", value: `Sent by <@${i.user.id}>` })] : [], components: [] });
+    if (i.guild) await logEvent(i.guild, i.user.id, "ticket draft sent", "ok");
+    return;
+  }
+  if (action === "discard" && id) {
+    await i.deferUpdate();
+    await i.editReply({ embeds: i.message.embeds, components: [] });
+    return;
+  }
   if (!id || (action !== "claim" && action !== "solve")) { await i.reply({ content: "That button isn't valid.", ephemeral: true }); return; }
   await i.deferUpdate();
   const r = await api<{ ok: boolean }>(`support/${action}`, i.user.id, { method: "POST", body: { id } });
@@ -38,8 +56,11 @@ export async function handleTicketButton(i: ButtonInteraction): Promise<void> {
     if (i.guild) await logEvent(i.guild, i.user.id, `ticket ${action}`, r.status === 403 ? "denied" : "error", failure(r));
     return;
   }
-  if (action === "claim") await stamp(i, `Claimed by <@${i.user.id}>`, solveRow(id));
-  else await stamp(i, `Marked solved by <@${i.user.id}>`);
+  if (action === "claim") {
+    await stamp(i, `Claimed by <@${i.user.id}>`, solveRow(id));
+    // The ticket changed hands, so the pinned summary shows the new assignee.
+    if (i.channel?.isThread()) void refreshSummary(i.channel, id);
+  } else await stamp(i, `Marked solved by <@${i.user.id}>`);
   if (i.guild) await logEvent(i.guild, i.user.id, `ticket ${action}`, "ok");
 }
 

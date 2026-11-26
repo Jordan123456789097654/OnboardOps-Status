@@ -39,6 +39,7 @@ export function startScheduler(client: Client, guildId: string): void {
   let lastSummary = alreadyPast(SUMMARY_HOUR) ? today() : "";
   let lastDigest = alreadyPast(SUMMARY_HOUR) ? today() : "";
   let lastStandup = alreadyPast(STANDUP_HOUR) ? today() : "";
+  let lastGaps = alreadyPast(SUMMARY_HOUR) ? today() : "";
 
   const raise = (g: Guild, key: string, bad: boolean, title: string, detail: string) => {
     if (bad && !active.has(key)) { active.add(key); void post(g, "alerts", new EmbedBuilder().setColor(0xdc2626).setTitle(title).setDescription(detail).setTimestamp(new Date())); }
@@ -106,6 +107,21 @@ export function startScheduler(client: Client, guildId: string): void {
           { name: "New subscribers", value: String(d.newSubscribers), inline: true },
           { name: "Newsletter issues", value: String(d.newsletterIssues), inline: true },
         ).setFooter({ text: "Last 7 days" }).setTimestamp(now));
+      }
+    }
+    // Monday: the questions Maya couldn't answer last week, so the docs can be improved.
+    if (hour === SUMMARY_HOUR && now.getUTCDay() === 1 && lastGaps !== today()) {
+      lastGaps = today();
+      const r = await api<{ items: { q: string; at: string }[] }>("ops/maya/gaps", "");
+      if (r.status === 200 && r.data) {
+        const items = r.data.items;
+        const lines = items.slice(-40).map((x) => `• ${x.q}`).join("\n").slice(0, 3800);
+        await post(g, "support-tickets", new EmbedBuilder()
+          .setColor(0x7c3aed)
+          .setTitle("Maya's weekly report: questions she couldn't answer")
+          .setDescription(items.length ? lines : "Nothing this week. Maya answered everything she was asked.")
+          .setFooter({ text: `${items.length} question(s) since the last report` })
+          .setTimestamp(now));
       }
     }
     const weekday = now.getUTCDay() >= 1 && now.getUTCDay() <= 5;

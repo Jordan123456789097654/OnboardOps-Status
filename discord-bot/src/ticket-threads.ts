@@ -67,6 +67,7 @@ export async function openTicketThreads(client: Client, guildId: string): Promis
       embeds: [ticketEmbed(t)],
       components: [controls({ id: t.id, threadId: thread.id })],
     });
+    void refreshSummary(thread, t.id);
     const saved = await api<{ ok: boolean }>("ops/tickets/thread", "", { method: "POST", body: { id: t.id, threadId: thread.id } });
     if (saved.status !== 200) {
       // Could not link it, so do not leave an orphan thread behind.
@@ -107,7 +108,7 @@ export async function sendFromThread(
 
 /* ---------------- Chat relay: customer and staff messages appear in the ticket thread ---------------- */
 
-type FeedMessage = { threadId: string; kind: "VISITOR" | "REPLY"; author: string; body: string; at: string };
+type FeedMessage = { ticketId: string; threadId: string; kind: "VISITOR" | "REPLY"; author: string; body: string; at: string };
 let feedSince = new Date().toISOString();
 
 /** Posts new customer and staff messages from linked tickets into their threads. Runs every 15 seconds. */
@@ -124,5 +125,59 @@ export async function relayTicketChats(client: Client): Promise<void> {
     const who = m.kind === "VISITOR" ? `Customer (${m.author})` : `Staff (${m.author})`;
     const body = m.body.length > 1800 ? `${m.body.slice(0, 1799)}…` : m.body;
     await thread.send({ content: `**${who}:** ${body}`, allowedMentions: { parse: [] } }).catch(() => undefined);
+    if (m.kind === "VISITOR") await reviewCustomerMessage(thread, m.ticketId, m.body);
   }
+}
+
+/* ---------------- Maya: sentiment flag, draft replies, summaries ---------------- */
+
+const MAYA_SUMMARY_TITLE = "Maya's summary";
+const DRAFT_TITLE = "Maya's suggested reply";
+
+/** Flags upset or crisis messages for the team right away. For a crisis, no draft is offered: a person should write it. */
+async function reviewCustomerMessage(thread: ThreadChannel, ticketId: string, text: string): Promise<void> {
+  const s = await api<{ angry: boolean; crisis: boolean; why: string }>("ops/tickets/sentiment", "", { method: "POST", body: { text } });
+  const flagged = s.status === 200 && s.data && (s.data.angry || s.data.crisis);
+  if (flagged && s.data) {
+    const crisis = s.data.crisis;
+    const embed = new EmbedBuilder()
+      .setColor(crisis ? 0xdc2626 : 0xea580c)
+      .setTitle(crisis ? "Possible crisis: read this now" : "Customer sounds upset")
+      .setDescription(s.data.why || "Maya flagged this message for a person.");
+    await thread.send({ content: `<@&${SUPPORT_ROLE_ID}>`, embeds: [embed], allowedMentions: { roles: [SUPPORT_ROLE_ID] } }).catch(() => undefined);
+  }
+  if (flagged && s.data?.crisis) return;
+
+  const d = await api<{ draft: string }>("ops/tickets/draft", "", { method: "POST", body: { id: ticketId } });
+  if (d.status !== 200 || !d.data?.draft) return;
+  const embed = new EmbedBuilder().setColor(0x7c3aed).setTitle(DRAFT_TITLE).setDescription(d.data.draft).setFooter({ text: "Maya wrote this for a person to check. Nothing is sent until someone presses Send." });
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`ticket:senddraft:${ticketId}`).setLabel("Send to customer").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`ticket:discard:${ticketId}`).setLabel("Discard").setStyle(ButtonStyle.Secondary),
+  );
+  await thread.send({ embeds: [embed], components: [row], allowedMentions: { parse: [] } }).catch(() => undefined);
+}
+
+/** Keeps one pinned summary at the top of the thread. Called when the thread opens and when the ticket is claimed. */
+export async function refreshSummary(thread: ThreadChannel, ticketId: string): Promise<void> {
+  const r = await api<{ summary: string; status: string; assignee: string | null; ref: string }>("ops/tickets/summary", "", { method: "POST", body: { id: ticketId } });
+  if (r.status !== 200 || !r.data) return;
+  const embed = new EmbedBuilder()
+    .setColor(0x2563eb)
+    .setTitle(MAYA_SUMMARY_TITLE)
+    .setDescription(r.data.summary)
+    .addFields(
+      { name: "Status", value: r.data.status, inline: true },
+      { name: "Assigned to", value: r.data.assignee ?? "nobody", inline: true },
+    )
+    .setFooter({ text: "Updated when the ticket changes hands." })
+    .setTimestamp(new Date());
+  const pinned = await thread.messages.fetchPins({ limit: 50 }).catch(() => null);
+  const mine = pinned?.items.map((p) => p.message).find((m) => m.author.id === thread.client.user?.id && m.embeds[0]?.title === MAYA_SUMMARY_TITLE);
+  if (mine) {
+    await mine.edit({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => undefined);
+    return;
+  }
+  const m = await thread.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => null);
+  if (m) await m.pin().catch(() => undefined);
 }
