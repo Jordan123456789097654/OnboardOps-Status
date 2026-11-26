@@ -11,7 +11,7 @@ import type { Client } from "discord.js";
  */
 export function startHealth(client: Client): void {
   const started = Date.now();
-  const port = Number(process.env.PORT) || 3000;
+  const port = Number(process.env.BOT_HEALTH_PORT || process.env.PORT) || 3000;
 
   createServer((req, res) => {
     const url = (req.url ?? "").split("?")[0];
