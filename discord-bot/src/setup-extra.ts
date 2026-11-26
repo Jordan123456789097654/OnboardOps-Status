@@ -135,7 +135,7 @@ const GUIDES: Guide[] = [
     footer: "OnboardOps guide: resources v1",
     embed: () => new EmbedBuilder().setTitle("Resources").setColor(BLUE).setDescription("The handbooks and tools the team uses. Everyone signs in with their own account.").addFields(
       field("Website", "https://www.onboardops.org"),
-      field("Status page", "https://status2.onboardops.org"),
+      field("Status page", "https://status.onboardops.org"),
       field("Staff console", "https://www.onboardops.org/admin"),
       field("Handbooks", "Incident response, support, security and access, data protection, staff and operations, trust and safety. They live in the staff workspace."),
     ),

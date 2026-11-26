@@ -88,7 +88,7 @@ export async function lookup(host: string, type: RecordType): Promise<string[]> 
 
 export type Cert = { host: string; ok: boolean; issuer?: string; validTo?: Date; daysLeft?: number; error?: string };
 
-export const CERT_HOSTS = ["onboardops.org", "www.onboardops.org", "api.onboardops.org", "status2.onboardops.org"];
+export const CERT_HOSTS = ["onboardops.org", "www.onboardops.org", "api.onboardops.org", "status.onboardops.org"];
 
 export function certInfo(host: string): Promise<Cert> {
   return new Promise((resolve) => {
