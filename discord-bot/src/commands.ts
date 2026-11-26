@@ -14,6 +14,7 @@ import { LEAVE_ROLE, ONCALL_ROLE, STAFF_ROLES, WEBHOOK_CHANNELS } from "./layout
 import { exportConfig, permissionCheck, runSetup, type Report } from "./setup";
 import { confirm } from "./util";
 import { opsCommands } from "./ops-commands";
+import { toolsCommands } from "./tools-commands";
 
 /** "any": everyone in the server. "staff": members with a staff role. "manage": the server owner, administrators, and the Owner or Admin roles. */
 export type Access = "any" | "staff" | "manage";
@@ -350,6 +351,8 @@ const help: Command = {
         "**Support:** `/ticket`, `/mytickets`, `/reply` (with saved replies), `/saved`, `/solve`. Use the Claim and Mark solved buttons on new tickets.",
         "**Moderation:** `/lookup`, `/warn`, `/ban`, `/unban`, `/suspend`, `/reinstate`. These open a private form. The website checks your own staff role.",
         "**Operations:** `/maintenance on|off` (owners).",
+        "**Health and tools (staff):** `/health` (every service), `/mailauth`, `/dns`, `/ssl`, `/changelog`, `/botinfo`. Everyone: `/time`.",
+        "**Incidents (staff):** `/incident start|note|resolve` runs an incident in its own thread. `/runbook` shows the step-by-step checklists.",
         "**Admins:** `/setup` (try `dry_run`), `/permcheck`, `/backup-config`, `/webhooks`, `/announce`, `/oncall set|clear`, `/purge`, `/slowmode`",
         "Pick your alert roles in #roles.",
       ].join("\n"),
@@ -358,5 +361,5 @@ const help: Command = {
 };
 
 export const commands = new Map<string, Command>(
-  [setup, permcheck, backup, webhooks, link, unlink, me, status, announce, standup, oncall, loa, purge, slowmode, userinfo, ping, help, ...opsCommands].map((c) => [c.json.name, c]),
+  [setup, permcheck, backup, webhooks, link, unlink, me, status, announce, standup, oncall, loa, purge, slowmode, userinfo, ping, help, ...opsCommands, ...toolsCommands].map((c) => [c.json.name, c]),
 );
