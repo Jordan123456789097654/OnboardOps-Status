@@ -104,3 +104,25 @@ export async function sendFromThread(
   return { ok: true, message: r.data.emailed ? "Sent. The customer was emailed and it's saved on the ticket." : "Saved on the ticket, but the email could not be sent. Check it in the admin panel." };
 }
 
+
+/* ---------------- Chat relay: customer and staff messages appear in the ticket thread ---------------- */
+
+type FeedMessage = { threadId: string; kind: "VISITOR" | "REPLY"; author: string; body: string; at: string };
+let feedSince = new Date().toISOString();
+
+/** Posts new customer and staff messages from linked tickets into their threads. Runs every 15 seconds. */
+export async function relayTicketChats(client: Client): Promise<void> {
+  const r = await api<{ messages: FeedMessage[] }>(`ops/tickets/feed?since=${encodeURIComponent(feedSince)}`, "");
+  if (r.status !== 200 || !r.data) {
+    console.error(`Chat relay: the website answered ${r.status} for ops/tickets/feed.`);
+    return;
+  }
+  for (const m of r.data.messages) {
+    feedSince = m.at > feedSince ? m.at : feedSince;
+    const thread = (await client.channels.fetch(m.threadId).catch(() => null)) as ThreadChannel | null;
+    if (!thread?.isThread()) continue;
+    const who = m.kind === "VISITOR" ? `Customer (${m.author})` : `Staff (${m.author})`;
+    const body = m.body.length > 1800 ? `${m.body.slice(0, 1799)}…` : m.body;
+    await thread.send({ content: `**${who}:** ${body}`, allowedMentions: { parse: [] } }).catch(() => undefined);
+  }
+}
