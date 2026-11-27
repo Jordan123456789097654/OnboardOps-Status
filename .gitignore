@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 database/
+.data/
 *.sqlite
 *.sqlite.db
 .DS_Store

@@ -185,9 +185,9 @@ const incident: Command = {
   json: new SlashCommandBuilder()
     .setName("incident")
     .setDescription("Run an incident in its own thread")
-    .addSubcommand((s) => s.setName("start").setDescription("Open an incident thread with the checklist").addStringOption((o) => o.setName("title").setDescription("Short name, for example Sign-in is failing").setRequired(true).setMaxLength(60)).addStringOption((o) => o.setName("severity").setDescription("How bad is it").setRequired(true).addChoices(...Object.entries(SEVERITIES).map(([k, v]) => ({ name: v.label, value: k })))).addStringOption((o) => o.setName("summary").setDescription("What you know so far").setMaxLength(500)))
+    .addSubcommand((s) => s.setName("start").setDescription("Open an incident thread with the checklist").addStringOption((o) => o.setName("title").setDescription("Short name, for example Sign-in is failing").setRequired(true).setMaxLength(60)).addStringOption((o) => o.setName("severity").setDescription("How bad is it").setRequired(true).addChoices(...Object.entries(SEVERITIES).map(([k, v]) => ({ name: v.label, value: k })))).addStringOption((o) => o.setName("summary").setDescription("What you know so far (as long as you need)").setMaxLength(3500)))
     .addSubcommand((s) => s.setName("note").setDescription("Add a timestamped entry to this incident's log").addStringOption((o) => o.setName("text").setDescription("What happened or what was done").setRequired(true).setMaxLength(500)))
-    .addSubcommand((s) => s.setName("resolve").setDescription("Close this incident and post the summary").addStringOption((o) => o.setName("summary").setDescription("What fixed it, in one or two sentences").setMaxLength(500)))
+    .addSubcommand((s) => s.setName("resolve").setDescription("Close this incident and post the summary").addStringOption((o) => o.setName("summary").setDescription("What fixed it and what happened (as long as you need)").setMaxLength(3500)))
     .setDMPermission(false)
     .toJSON(),
   access: "staff",
